@@ -1,3 +1,4 @@
+// Canodromo.java
 package arsw.threads;
 
 import java.awt.BorderLayout;
@@ -12,57 +13,40 @@ import java.awt.event.WindowEvent;
 
 import javax.swing.JButton;
 import javax.swing.JFrame;
-import javax.swing.JPanel;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
 
 /**
  * Interfaz de usuario y modelo para un Canodromo
- * 
+ *
  * @author rlopez
- * 
  */
 public class Canodromo extends JFrame {
 	private static final long serialVersionUID = 1L;
 
-	/**
-	 * Carriles del canodromo
-	 */
 	private Carril[] carril;
-
 	private JButton butStart = new JButton("Start");
 	private JButton butStop = new JButton("Stop");
 	private JButton butContinue = new JButton("Continue");
-	/**
-	 * Constructor
-	 * 
-	 * @param nCarriles
-	 *            Numero de carriles
-	 * @param longPista
-	 *            Longitud de la pista
-	 */
+
+	// >>> bloqueo y bandera para pausa
+	private final Object pauseLock = new Object();
+	private volatile boolean paused = false;
+
 	public Canodromo(int nCarriles, int longPista) {
 		carril = new Carril[nCarriles];
-		for (int i = 0; i < carril.length; i++) {
+		for (int i = 0; i < nCarriles; i++) {
 			carril[i] = new Carril(longPista, "" + i);
 		}
 
 		JPanel cont = (JPanel) getContentPane();
 		cont.setLayout(new BorderLayout());
 
-		JPanel panPistas = new JPanel();
-		panPistas.setLayout(new GridLayout(nCarriles, 1));
-
-		JPanel panCarril;
-		BorderLayout bLay;
-		GridLayout gridTrack = new GridLayout(1, longPista);
+		JPanel panPistas = new JPanel(new GridLayout(nCarriles, 1));
 		for (int row = 0; row < nCarriles; row++) {
-			bLay = new BorderLayout();
-			panCarril = new JPanel();
-			panCarril.setLayout(bLay);
-			JPanel panTrack = new JPanel();
-			panTrack.setLayout(gridTrack);
-
+			JPanel panCarril = new JPanel(new BorderLayout());
+			JPanel panTrack = new JPanel(new GridLayout(1, longPista));
 			for (int col = 0; col < longPista; col++) {
 				panTrack.add(carril[row].getPaso(col));
 			}
@@ -70,93 +54,62 @@ public class Canodromo extends JFrame {
 			panCarril.add(carril[row].getLlegada(), BorderLayout.EAST);
 			panPistas.add(panCarril);
 		}
-
 		panPistas.setBorder(new EmptyBorder(new Insets(5, 0, 5, 0)));
-
-		int butWidht = 8;
-		int butHeight = 20;
 		cont.add(panPistas, BorderLayout.NORTH);
 
-		JPanel butPanel = new JPanel();
-		butPanel.setLayout(new FlowLayout());
+		JPanel butPanel = new JPanel(new FlowLayout());
 		butPanel.add(butStart);
 		butPanel.add(butStop);
 		butPanel.add(butContinue);
 		cont.add(butPanel, BorderLayout.SOUTH);
 
-		this.setSize(butWidht * longPista, butHeight * nCarriles + 400);
-
-		// Get the size of the screen
+		this.setSize(longPista * 8, nCarriles * 20 + 400);
 		Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
-		// Determine the new location of the window
-		int w = this.getSize().width;
-		int h = this.getSize().height;
-		int x = (dim.width - w) / 2;
-		int y = (dim.height - h) / 2;
-		// Move the window
-		this.setLocation(x, y);
+		this.setLocation((dim.width - getWidth())/2, (dim.height - getHeight())/2);
 		this.setTitle("Canodromo");
-
 		this.addWindowListener(new WindowAdapter() {
-			@Override
-			public void windowClosing(WindowEvent e) {
+			@Override public void windowClosing(WindowEvent e) {
 				System.exit(0);
 			}
 		});
 	}
 
-	/**
-	 * Reinicia cada uno de los carriles
-	 */
-	public void restart() {
-		for (int i = 0; i < carril.length; i++) {
-			carril[i].reStart();
+	// Métodos para pausa / reanudar
+	public void pauseRace() {
+		paused = true;
+	}
+
+	public void resumeRace() {
+		synchronized (pauseLock) {
+			paused = false;
+			pauseLock.notifyAll();
 		}
 	}
 
-	/**
-	 * Retorna un carril
-	 * 
-	 * @param i
-	 *            Numero del carril
-	 * @return
-	 */
-	public Carril getCarril(int i) {
-		return carril[i];
+	public void waitIfPaused() throws InterruptedException {
+		synchronized (pauseLock) {
+			while (paused) {
+				pauseLock.wait();
+			}
+		}
 	}
 
-	public int getNumCarriles() {
-		return carril.length;
+	// Accesores
+	public Carril getCarril(int i) { return carril[i]; }
+	public int getNumCarriles() { return carril.length; }
+
+	public void setStartAction(ActionListener action)   { butStart.addActionListener(action); }
+	public void setStopAction(ActionListener action)    { butStop.addActionListener(action); }
+	public void setContinueAction(ActionListener action){ butContinue.addActionListener(action); }
+
+	public void winnerDialog(String winner, int total) {
+		JOptionPane.showMessageDialog(null,
+				"El ganador fue: " + winner + " de un total de " + total);
 	}
 
-	/**
-	 * Asocia una accion con el boton de start
-	 * 
-	 * @param action
-	 */
-	public void setStartAction(ActionListener action) {
-		butStart.addActionListener(action);
+	public void restart() {
+		for (Carril c : carril) {
+			c.reStart();
+		}
 	}
-
-	/**
-	 * Asocia una accion con el boton de stop
-	 * 
-	 * @param action
-	 */
-	public void setStopAction(ActionListener action) {
-		butStop.addActionListener(action);
-	}
-
-	/**
-	 * Asocia una accion con el boton de continuar
-	 * 
-	 * @param action
-	 */
-	public void setContinueAction(ActionListener action){
-		butContinue.addActionListener(action);
-	}
-	
-	public void winnerDialog(String winner,int total) {
-            JOptionPane.showMessageDialog(null, "El ganador fue:" + winner + " de un total de " + total);
-        }	
 }
